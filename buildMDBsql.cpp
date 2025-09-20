@@ -20,7 +20,7 @@
 const int THREADLIMIT = 4;
 const int PRINCIPLES_BATCH_SIZE = 5000000;
 const bool VERBOSE = false;
-const int LOGGING_FACTOR = 4000;
+const int LOGGING_FACTOR = 5000;
 
 namespace fs = std::filesystem;
 using st = std::vector<std::string>::size_type;
@@ -46,10 +46,9 @@ private:
     JTB::Vec<JTB::Vec<JTB::Str>>* buffer {};
     int chunksize {0};
 public:
-    Filebuffer(std::ifstream& filestream) {
+    Filebuffer(std::ifstream& filestream): buffer(new JTB::Vec<JTB::Vec<JTB::Str>>) {
 	JTB::Str buf {};
 	JTB::Vec<JTB::Str> rowslicer {};
-	buffer = new JTB::Vec<JTB::Vec<JTB::Str>>;
 	while ( filestream.good() && !buf.clear().absorbLine(filestream).isEmpty() ) {
 	    rowslicer = buf.split("\t");
 	    buffer->push(rowslicer);
@@ -182,6 +181,9 @@ void loadRatings(SQLite::Database& db, std::ifstream& filestream) {
 		    insert.exec(); 
 		} catch (SQLite::Exception& e) { 
 		    if (VERBOSE) std::cerr << "Problem inserting ratings: " << e.what() << '\n';
+		    if (filebuffer.getBuf().at(line).at(TCONST) == "tt0053779") {
+			std::cerr << '\n' << e.what() << '\n';
+		    }
 		} catch (std::exception& e) {
 		    std::cerr << "Error: " << e.what() << '\n';
 		    exit(1);
@@ -582,16 +584,17 @@ void loadPrincipals(SQLite::Database& db, std::ifstream& principals_stream, std:
 			std::lock_guard<std::mutex> lock {mutex};
 			prin_pbar.update();
 		    }
-		    if (tconst == skipbuf) continue;
+		    /* if (tconst == skipbuf) continue; */
 		    /* std::cerr << threadnum << " : " << (float(line-start)/chunksize)*100 << '\n'; */
 		    JTB::Str category = filebuffer->at(line).at(icast(Principles::CATEGORY));
+		    const char* nconst = filebuffer->at(line).at(icast(Principles::NCONST)).c_str();
 		    try {
 			/* actors <== 11/29/24 15:39:28 */ 
 			if (category.startsWith("a")) {
 			    try {
 				actors_insert.reset();
 				actors_insert.bind(1, tconst.c_str());
-				actors_insert.bind(2, filebuffer->at(line).at(icast(Principles::NCONST)).c_str());
+				actors_insert.bind(2, nconst);
 				actors_insert.exec();
 			    } catch (SQLite::Exception& e) {
 				if (VERBOSE) std::cerr << "actor excpt: " << e.what() << '\n';
@@ -606,7 +609,7 @@ void loadPrincipals(SQLite::Database& db, std::ifstream& principals_stream, std:
 			    try {
 				directors_insert.reset();
 				directors_insert.bind(1, tconst.c_str());
-				directors_insert.bind(2, filebuffer->at(line).at(icast(Principles::NCONST)).c_str());
+				directors_insert.bind(2, nconst);
 				directors_insert.exec();
 			    } catch (SQLite::Exception& e) {
 				if (VERBOSE) std::cerr << "director excpt: " << e.what() << '\n';
@@ -621,7 +624,7 @@ void loadPrincipals(SQLite::Database& db, std::ifstream& principals_stream, std:
 			    try {
 				writers_insert.reset();
 				writers_insert.bind(1, tconst.c_str());
-				writers_insert.bind(2, filebuffer->at(line).at(icast(Principles::NCONST)).c_str());
+				writers_insert.bind(2, nconst);
 				writers_insert.exec();
 			    } catch (SQLite::Exception& e) {
 				if (VERBOSE) std::cerr << "writer excpt: " << e.what() << '\n';
@@ -703,7 +706,7 @@ int main() {
 	SQLite::Statement locking { db, "pragma locking_mode = NORMAL" };
 	SQLite::Statement tempstore { db, "pragma temp_store = memory" };
 	SQLite::Statement mmap { db, "pragma mmap_size = 30000000000" };
-	SQLite::Statement foreign_keys { db, "pragma foreign_keys = on" };
+	SQLite::Statement foreign_keys { db, "pragma foreign_keys = off" };
 	cache.executeStep(); 
 	locking.executeStep();
 	foreign_keys.executeStep();
@@ -765,19 +768,17 @@ int main() {
 	db.exec(R"(CREATE TABLE IF NOT EXISTS "Ratings" (
 	    tconst TEXT NOT NULL UNIQUE, 
 	    rating FLOAT NOT NULL,
-	    numVotes INTEGER NOT NULL,
-	    FOREIGN KEY (tconst) REFERENCES Films (tconst)))");
+	    numVotes INTEGER NOT NULL))");
 	db.exec(R"(CREATE TABLE IF NOT EXISTS "Languages" (
 	    tconst TEXT NOT NULL, 
-	    lang TEXT NOT NULL,
-	    FOREIGN KEY (tconst) REFERENCES Films (tconst)))");
+	    lang TEXT NOT NULL))");
 
 	/* loadBasics(db, basics_stream); */
 	/* loadRatings(db, ratings_stream); */
-	/* loadLanguage(db, lang_stream); */
+	loadLanguage(db, lang_stream);
 	/* loadPrincipals(db, principals_stream, name_basics_stream); */
 	/* loadCannes(db, cannes_stream); */
-	loadCriterion(db, criterion_stream);
+	/* loadCriterion(db, criterion_stream); */
     } catch (std::exception& e) {
 	std::cerr << "error at the start: " << e.what() << '\n';
 	exit(1);
