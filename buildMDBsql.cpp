@@ -323,7 +323,7 @@ void loadCriterion(SQLite::Database& db, std::ifstream& criterion_filestream) {
 		AND Directors.nconst = Names.nconst AND (title LIKE ? OR originalTitle LIKE ?) AND name LIKE ?" };
 	    SQLite::Statement insert { db, "INSERT INTO Criterion (tconst) VALUES (?)" };
 	    for (int line = start; line < std::min(stop,size); ++line) {
-		if (line%5 == 0) {
+		if (line%LOGGING_FACTOR == 0) {
 		    std::lock_guard<std::mutex> lock {mutex};
 		    pbar.update();
 		}
@@ -426,7 +426,7 @@ void loadCannes(SQLite::Database& db, std::ifstream& cannesfilestream) {
 		AND Directors.nconst = Names.nconst AND (title LIKE ? OR originalTitle LIKE ?) AND name LIKE ?" };
 	    SQLite::Statement insert { db, "INSERT INTO Cannes (tconst) VALUES (?)" };
 	    for (int line = start; line < std::min(stop,size); ++line) {
-		if (line%5 == 0) {
+		if (line%LOGGING_FACTOR == 0) {
 		    std::lock_guard<std::mutex> lock {mutex};
 		    pbar.update();
 		}
@@ -773,12 +773,12 @@ int main() {
 	    tconst TEXT NOT NULL, 
 	    lang TEXT NOT NULL))");
 
-	/* loadBasics(db, basics_stream); */
-	/* loadRatings(db, ratings_stream); */
+	loadBasics(db, basics_stream); 
+	loadRatings(db, ratings_stream);
 	loadLanguage(db, lang_stream);
-	/* loadPrincipals(db, principals_stream, name_basics_stream); */
-	/* loadCannes(db, cannes_stream); */
-	/* loadCriterion(db, criterion_stream); */
+	loadPrincipals(db, principals_stream, name_basics_stream); 
+	// loadCannes(db, cannes_stream); 
+	// loadCriterion(db, criterion_stream);
     } catch (std::exception& e) {
 	std::cerr << "error at the start: " << e.what() << '\n';
 	exit(1);
